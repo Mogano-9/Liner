@@ -102,6 +102,37 @@
   .adj-row input[type=range]{width:100%;accent-color:var(--accent);cursor:pointer;margin-top:2px;}
   .adj-foot{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;}
   .adj-tip{font-size:12px;color:var(--muted);}
+  /* 矩阵位置示意 */
+  .matrix-hint{
+    background:var(--panel2);border:1px solid var(--border);
+    border-radius:10px;padding:12px 14px;
+  }
+  .mh-ttl{
+    display:flex;justify-content:space-between;align-items:baseline;
+    gap:8px;flex-wrap:wrap;margin-bottom:10px;
+  }
+  .mh-ttl b{font-size:14px;font-weight:600;}
+  .mh-ttl span{font-size:12px;color:var(--muted);}
+  .mh-body{display:flex;align-items:center;justify-content:center;gap:10px;}
+  .mh-bracket{
+    width:12px;align-self:stretch;
+    border:2px solid var(--axis);
+  }
+  .mh-bracket.l{border-right:none;border-radius:4px 0 0 4px;}
+  .mh-bracket.r{border-left:none;border-radius:0 4px 4px 0;}
+  .mh-grid{
+    display:grid;grid-template-columns:1fr 1fr;
+    gap:6px 22px;padding:4px 2px;
+    font-family:ui-monospace,Menlo,Consolas,monospace;
+    font-size:20px;font-weight:700;line-height:1.2;text-align:center;
+  }
+  .mh-grid span{min-width:46px;}
+  .mh-grid .va{color:#fca5a5;}
+  .mh-grid .vb{color:#fcd34d;}
+  .mh-grid .vc{color:#a5b4fc;}
+  .mh-grid .vd{color:#86efac;}
+  .mh-note{font-size:12px;color:var(--muted);margin-top:10px;line-height:1.7;}
+  .mh-note b{color:var(--ink);}
   /* 特征向量图例 */
   .eig-switch{margin-left:auto;}
   .eig-legend{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px;min-height:22px;}
@@ -361,6 +392,19 @@
         </div>
         <input type="range" id="rng-d" step="0.1" min="-5" max="5" value="1">
       </div>
+      <!-- 矩阵位置示意：a b / c d 分别对应哪一个格子 -->
+      <div class="matrix-hint">
+        <div class="mh-ttl"><b>矩阵位置示意</b><span>你正在调节的 a / b / c / d</span></div>
+        <div class="mh-body">
+          <div class="mh-bracket l"></div>
+          <div class="mh-grid">
+            <span class="va" id="hint-a">1</span><span class="vb" id="hint-b">0</span>
+            <span class="vc" id="hint-c">0</span><span class="vd" id="hint-d">1</span>
+          </div>
+          <div class="mh-bracket r"></div>
+        </div>
+        <div class="mh-note">上排 <b>a、b</b> 是第 1 行，下排 <b>c、d</b> 是第 2 行；左列 [a, c]ᵀ 是 <b>e₁</b> 变换后的位置，右列 [b, d]ᵀ 是 <b>e₂</b> 变换后的位置。数值随上方滑块实时更新。</div>
+      </div>
       <div class="adj-foot">
         <button id="add-seq" class="seq-btn primary">➕ 加入序列</button>
         <span class="adj-tip">步进 0.1 · 范围 −5 ~ 5</span>
@@ -438,6 +482,8 @@
     tags:document.getElementById('tags'),
     legend:document.getElementById('eig-legend'),
     count:document.getElementById('seq-count'),
+    hintA:document.getElementById('hint-a'), hintB:document.getElementById('hint-b'),
+    hintC:document.getElementById('hint-c'), hintD:document.getElementById('hint-d'),
   };
 
   const cvR = document.getElementById('cv-right');
@@ -906,6 +952,9 @@
     const C=displayOverride || composite(E);
     const eig=eigen(C);
     drawRight(C, eig);
+    // 矩阵位置示意：始终对应「数值调整」里正在编辑的 E
+    out.hintA.textContent=fmt(E.a); out.hintB.textContent=fmt(E.b);
+    out.hintC.textContent=fmt(E.c); out.hintD.textContent=fmt(E.d);
     // 信息（均针对复合矩阵 C）
     out.a.textContent=fmt(C.a); out.b.textContent=fmt(C.b);
     out.c.textContent=fmt(C.c); out.d.textContent=fmt(C.d);
