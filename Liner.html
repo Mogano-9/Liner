@@ -148,6 +148,11 @@
   .seq-del:hover{color:var(--red);background:rgba(239,68,68,.12);}
   .seq-note{font-size:12px;color:var(--muted);margin-top:10px;line-height:1.7;}
   .seq-note2{font-size:12px;color:var(--muted);margin-top:8px;}
+  .seq-chip.playing{
+    border-color:var(--accent);background:rgba(56,189,248,.18);
+    box-shadow:0 0 0 1px var(--accent);
+  }
+  .seq-step{font-size:13px;color:var(--accent);font-weight:600;margin-top:10px;min-height:18px;}
   /* 预设按钮 */
   .presets{
     background:var(--panel);
@@ -299,10 +304,12 @@
     <div class="head">
       <div class="ttl">变换序列 · 复合变换</div>
       <div class="seq-actions">
+        <button id="play-seq" class="seq-btn">▶ 分步播放</button>
         <button id="clear-seq" class="seq-btn">清空序列</button>
       </div>
     </div>
     <div class="seq-list" id="seq-list"></div>
+    <div class="seq-step" id="seq-step"></div>
     <div class="seq-note">应用顺序从左到右：先 M₁ 后 M₂……，编辑器中正在调整的矩阵最后作用。复合矩阵 M = E·Mₖ···M₁，由于矩阵乘法不满足交换律，顺序会直接影响结果。</div>
   </div>
 
@@ -510,7 +517,11 @@
 
   // 平滑插值动画：从当前矩阵演变到目标矩阵
   let animId=null;
-  function cancelAnim(){ if(animId){ cancelAnimationFrame(animId); animId=null; } }
+  function cancelAnim(){
+    if(animId){ cancelAnimationFrame(animId); animId=null; }
+    if(playbackId){ cancelAnimationFrame(playbackId); playbackId=null; }
+    displayOverride=null;
+  }
   function easeInOutCubic(t){ return t<0.5 ? 4*t*t*t : 1-Math.pow(-2*t+2,3)/2; }
   function animateTo(m, btn){
     cancelAnim();
@@ -533,8 +544,18 @@
   }
 
   document.getElementById('reset').addEventListener('click',()=>{
-    if(animToggle.checked){ animateTo([1,0,0,1], null); }
-    else { cancelAnim(); applyMatrix([1,0,0,1]); markActive(null); render(); }
+    cancelAnim();
+    const C = composite(readParams());   // 记录当前屏幕上实际显示的复合矩阵，作为动画起点
+    sequence.length=0;                 // ✅ 重置必须同时清空序列，否则 C 仍是序列乘积，看起来「没重置」
+    setPlayBtn(false);
+    clearChipHighlight(); setStepLabel(0,0);
+    renderSeq();
+    if(animToggle.checked){
+      applyMatrix([C.a,C.b,C.c,C.d]); // 把编辑器设为当前复合效果，避免动画跳变
+      animateTo([1,0,0,1], null);     // 平滑插值回单位矩阵
+    } else {
+      applyMatrix([1,0,0,1]); markActive(null); render();
+    }
   });
 
   // ===== 复合变换序列 =====
@@ -560,6 +581,7 @@
   function renderSeq(){
     const list=document.getElementById('seq-list');
     list.innerHTML='';
+    chipEls=[];
     if(sequence.length===0){
       const d=document.createElement('div');
       d.className='seq-empty';
@@ -575,11 +597,13 @@
           '<button class="seq-del" data-i="'+i+'" title="删除此变换">×</button>';
         chip.addEventListener('click',(ev)=>{
           if(ev.target.classList.contains('seq-del')){
+            cancelAnim();
             sequence.splice(i,1); renderSeq(); render(); return;
           }
           cancelAnim();
           applyMatrix([m.a,m.b,m.c,m.d]); markActive(null); render();
         });
+        chipEls.push(chip);
         list.appendChild(chip);
       });
     }
@@ -593,7 +617,79 @@
     renderSeq(); render();
   });
   document.getElementById('clear-seq').addEventListener('click',()=>{
-    sequence=[]; renderSeq(); render();
+    cancelAnim();
+    sequence.length=0;                 // ✅ sequence 是 const，不能整体重新赋值；用 length=0 原地清空
+    setPlayBtn(false);                 // ✅ 播放途中点清空时，复位「分步播放」按钮状态
+    clearChipHighlight(); setStepLabel(0,0);
+    renderSeq();
+    applyMatrix([1,0,0,1]); markActive(null);   // ✅ 编辑器也回单位，保证复合矩阵 C = I
+    render();
+  });
+
+  // ===== 分步连续播放：从单位矩阵依次过渡到每个子矩阵的累计复合 =====
+  let playbackId=null;
+  let displayOverride=null;   // 播放期间覆盖显示的复合矩阵
+  let chipEls=[];
+  const playBtn=document.getElementById('play-seq');
+  const seqStep=document.getElementById('seq-step');
+  function setPlayBtn(playing){
+    playBtn.textContent=playing?'■ 停止':'▶ 分步播放';
+    playBtn.classList.toggle('primary',playing);
+  }
+  function highlightChip(i){ chipEls.forEach((el,j)=>el.classList.toggle('playing',j===i)); }
+  function clearChipHighlight(){ chipEls.forEach(el=>el.classList.remove('playing')); }
+  function setStepLabel(cur,total){
+    seqStep.textContent = cur>0 ? ('正在应用 M'+sub(cur)+' · 第 '+cur+' / '+total+' 步') : '';
+  }
+  function stopPlayback(){
+    cancelAnim();
+    setStepLabel(0,0); clearChipHighlight(); setPlayBtn(false);
+    applyMatrix([1,0,0,1]); markActive(null); render();
+  }
+  function playSequence(){
+    if(sequence.length===0) return;
+    cancelAnim();
+    markActive(null);
+    // 累计复合：steps[0]=I, steps[i]=Mi···M2·M1
+    const steps=[{a:1,b:0,c:0,d:1}];
+    let C={a:1,b:0,c:0,d:1};
+    for(let i=0;i<sequence.length;i++){ C=matMul(sequence[i],C); steps.push({a:C.a,b:C.b,c:C.c,d:C.d}); }
+    const stepDur=900;
+    let idx=0, t0=null;
+    setPlayBtn(true);
+    function frame(now){
+      if(t0===null)t0=now;
+      const t=Math.min(1,(now-t0)/stepDur);
+      const e=easeInOutCubic(t);
+      const from=steps[idx], to=steps[idx+1];
+      displayOverride={
+        a:from.a+(to.a-from.a)*e,
+        b:from.b+(to.b-from.b)*e,
+        c:from.c+(to.c-from.c)*e,
+        d:from.d+(to.d-from.d)*e,
+      };
+      setStepLabel(idx+1,sequence.length);
+      highlightChip(idx);
+      render();
+      if(t<1){ playbackId=requestAnimationFrame(frame); }
+      else {
+        idx++;
+        if(idx>=steps.length-1){
+          playbackId=null;
+          displayOverride=null;
+          setStepLabel(0,0); clearChipHighlight(); setPlayBtn(false);
+          applyMatrix([1,0,0,1]); markActive(null); render();
+          return;
+        }
+        t0=now;
+        playbackId=requestAnimationFrame(frame);
+      }
+    }
+    playbackId=requestAnimationFrame(frame);
+  }
+  playBtn.addEventListener('click',()=>{
+    if(playbackId){ stopPlayback(); return; }
+    playSequence();
   });
 
   // 高清画布尺寸
@@ -807,7 +903,7 @@
 
   function render(){
     const E=readParams();
-    const C=composite(E);
+    const C=displayOverride || composite(E);
     const eig=eigen(C);
     drawRight(C, eig);
     // 信息（均针对复合矩阵 C）
