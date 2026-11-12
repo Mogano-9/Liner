@@ -112,6 +112,42 @@
   }
   .eig-item .sw{width:16px;height:4px;border-radius:2px;display:inline-block;}
   .eig-item.muted{color:var(--muted);}
+  /* 变换序列 */
+  .seq{
+    background:var(--panel);border:1px solid var(--border);
+    border-radius:14px;padding:14px 16px;margin-bottom:20px;
+  }
+  .seq .head{
+    display:flex;justify-content:space-between;align-items:center;
+    gap:12px;flex-wrap:wrap;margin-bottom:12px;
+  }
+  .seq .ttl{font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;}
+  .seq-actions{display:flex;gap:8px;}
+  .seq-btn{
+    background:var(--panel2);color:var(--ink);
+    border:1px solid var(--border);border-radius:8px;
+    padding:7px 14px;font-size:13px;cursor:pointer;transition:.18s;
+  }
+  .seq-btn:hover{border-color:var(--accent);color:var(--accent);}
+  .seq-btn.primary{background:var(--accent);color:#04121f;border-color:var(--accent);font-weight:600;}
+  .seq-btn.primary:hover{filter:brightness(1.12);color:#04121f;}
+  .seq-list{display:flex;flex-wrap:wrap;gap:10px;min-height:40px;}
+  .seq-empty{color:var(--muted);font-size:13px;align-self:center;padding:8px 0;}
+  .seq-chip{
+    display:flex;align-items:center;gap:9px;
+    background:var(--panel2);border:1px solid var(--border);
+    border-radius:9px;padding:7px 10px;cursor:pointer;transition:.15s;
+  }
+  .seq-chip:hover{border-color:var(--accent);}
+  .seq-idx{font-weight:700;color:var(--accent);font-size:14px;}
+  .seq-m{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;color:var(--ink);}
+  .seq-del{
+    background:transparent;border:none;color:var(--muted);
+    font-size:16px;cursor:pointer;line-height:1;padding:2px 5px;border-radius:4px;
+  }
+  .seq-del:hover{color:var(--red);background:rgba(239,68,68,.12);}
+  .seq-note{font-size:12px;color:var(--muted);margin-top:10px;line-height:1.7;}
+  .seq-note2{font-size:12px;color:var(--muted);margin-top:8px;}
   /* 预设按钮 */
   .presets{
     background:var(--panel);
@@ -258,6 +294,18 @@
     <div class="preset-grid" id="preset-grid"></div>
   </div>
 
+  <!-- 变换序列 -->
+  <div class="seq">
+    <div class="head">
+      <div class="ttl">变换序列 · 复合变换</div>
+      <div class="seq-actions">
+        <button id="clear-seq" class="seq-btn">清空序列</button>
+      </div>
+    </div>
+    <div class="seq-list" id="seq-list"></div>
+    <div class="seq-note">应用顺序从左到右：先 M₁ 后 M₂……，编辑器中正在调整的矩阵最后作用。复合矩阵 M = E·Mₖ···M₁，由于矩阵乘法不满足交换律，顺序会直接影响结果。</div>
+  </div>
+
   <!-- 数值调整 + 变换画布 -->
   <div class="stage">
     <div class="panel adjust-panel">
@@ -307,6 +355,7 @@
         <input type="range" id="rng-d" step="0.1" min="-5" max="5" value="1">
       </div>
       <div class="adj-foot">
+        <button id="add-seq" class="seq-btn primary">➕ 加入序列</button>
         <span class="adj-tip">步进 0.1 · 范围 −5 ~ 5</span>
       </div>
     </div>
@@ -327,13 +376,14 @@
   <!-- 实时信息 -->
   <div class="card info">
     <div class="box">
-      <div class="ttl">当前矩阵</div>
+      <div class="ttl">复合矩阵 M</div>
       <div class="matrix">
         <span>[</span>
         <div class="mcol"><span id="m-a">1</span><span id="m-c">0</span></div>
         <div class="mcol"><span id="m-b">0</span><span id="m-d">1</span></div>
         <span>]</span>
       </div>
+      <div class="seq-note2">由 <span id="seq-count">0</span> 个变换复合而成</div>
     </div>
     <div class="box">
       <div class="ttl">行列式 det = ad − bc</div>
@@ -356,6 +406,8 @@
     任意点 (x, y) = x·e₁ + y·e₂，变换后即为 x·(第1列) + y·(第2列)。
     因此整个网格的变形，都由这两个基向量的新位置线性「拉伸」出来——
     单位正方形被映射成一个平行四边形，其面积恰好等于 |det|。
+    <br><b>复合变换：</b>连续施加多个线性变换，等价于把它们对应的矩阵依次相乘；
+    由于矩阵乘法<b>不满足交换律</b>，变换的先后顺序会直接影响最终结果。
   </div>
 </div>
 
@@ -378,6 +430,7 @@
     det:document.getElementById('det'), area:document.getElementById('area'),
     tags:document.getElementById('tags'),
     legend:document.getElementById('eig-legend'),
+    count:document.getElementById('seq-count'),
   };
 
   const cvR = document.getElementById('cv-right');
@@ -482,6 +535,65 @@
   document.getElementById('reset').addEventListener('click',()=>{
     if(animToggle.checked){ animateTo([1,0,0,1], null); }
     else { cancelAnim(); applyMatrix([1,0,0,1]); markActive(null); render(); }
+  });
+
+  // ===== 复合变换序列 =====
+  const sequence=[];   // 已提交的变换矩阵，按应用顺序存放（先作用在前的靠前）
+  function matMul(X,Y){
+    return {
+      a:X.a*Y.a+X.b*Y.c,
+      b:X.a*Y.b+X.b*Y.d,
+      c:X.c*Y.a+X.d*Y.c,
+      d:X.c*Y.b+X.d*Y.d,
+    };
+  }
+  // 复合矩阵：编辑器矩阵 E 在序列乘积之后作用，C = E·Mk···M2·M1
+  function composite(E){
+    let C={a:1,b:0,c:0,d:1};
+    for(let i=0;i<sequence.length;i++){ C=matMul(sequence[i],C); }
+    return matMul(E,C);
+  }
+  function sub(n){
+    const map={'0':'₀','1':'₁','2':'₂','3':'₃','4':'₄','5':'₅','6':'₆','7':'₇','8':'₈','9':'₉'};
+    return String(n).split('').map(c=>map[c]).join('');
+  }
+  function renderSeq(){
+    const list=document.getElementById('seq-list');
+    list.innerHTML='';
+    if(sequence.length===0){
+      const d=document.createElement('div');
+      d.className='seq-empty';
+      d.textContent='序列为空 · 调整矩阵后点击「加入序列」';
+      list.appendChild(d);
+    } else {
+      sequence.forEach((m,i)=>{
+        const chip=document.createElement('div');
+        chip.className='seq-chip';
+        chip.title='点击载入到编辑器';
+        chip.innerHTML='<span class="seq-idx">M'+sub(i+1)+'</span>'+
+          '<span class="seq-m">['+[m.a,m.b,m.c,m.d].map(fmt).join(', ')+']</span>'+
+          '<button class="seq-del" data-i="'+i+'" title="删除此变换">×</button>';
+        chip.addEventListener('click',(ev)=>{
+          if(ev.target.classList.contains('seq-del')){
+            sequence.splice(i,1); renderSeq(); render(); return;
+          }
+          cancelAnim();
+          applyMatrix([m.a,m.b,m.c,m.d]); markActive(null); render();
+        });
+        list.appendChild(chip);
+      });
+    }
+    out.count.textContent=sequence.length;
+  }
+  document.getElementById('add-seq').addEventListener('click',()=>{
+    const E=readParams();
+    sequence.push({a:E.a,b:E.b,c:E.c,d:E.d});
+    cancelAnim();
+    applyMatrix([1,0,0,1]); markActive(null);
+    renderSeq(); render();
+  });
+  document.getElementById('clear-seq').addEventListener('click',()=>{
+    sequence=[]; renderSeq(); render();
   });
 
   // 高清画布尺寸
@@ -694,16 +806,18 @@
   }
 
   function render(){
-    const P=readParams();
-    const eig=eigen(P);
-    drawRight(P, eig);
-    // 信息
-    out.a.textContent=fmt(P.a); out.b.textContent=fmt(P.b);
-    out.c.textContent=fmt(P.c); out.d.textContent=fmt(P.d);
-    const det=P.a*P.d-P.b*P.c;
+    const E=readParams();
+    const C=composite(E);
+    const eig=eigen(C);
+    drawRight(C, eig);
+    // 信息（均针对复合矩阵 C）
+    out.a.textContent=fmt(C.a); out.b.textContent=fmt(C.b);
+    out.c.textContent=fmt(C.c); out.d.textContent=fmt(C.d);
+    const det=C.a*C.d-C.b*C.c;
     out.det.textContent=det.toFixed(2);
     out.area.textContent=Math.abs(det).toFixed(2);
-    const cls=classify(P);
+    out.count.textContent=sequence.length;
+    const cls=classify(C);
     out.tags.innerHTML='';
     cls.tags.forEach((t,i)=>{
       const s=document.createElement('span');
@@ -730,6 +844,7 @@
   }
 
   window.addEventListener('resize',render);
+  renderSeq();
   render();
 })();
 </script>
