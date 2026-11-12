@@ -72,10 +72,46 @@
   .ctrl input[type=range]{
     width:100%;margin-top:10px;accent-color:var(--accent);cursor:pointer;
   }
-  .ctrl.a .name{color:#fca5a5;}
-  .ctrl.b .name{color:#fcd34d;}
-  .ctrl.c .name{color:#a5b4fc;}
-  .ctrl.d .name{color:#86efac;}
+  /* 数值调整模块 */
+  .adjust-panel{display:flex;flex-direction:column;gap:13px;}
+  .adj-row{
+    background:var(--panel2);border:1px solid var(--border);
+    border-radius:10px;padding:12px 14px;
+  }
+  .adj-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
+  .pname{font-size:18px;font-weight:700;}
+  .adj-row.a .pname{color:#fca5a5;}
+  .adj-row.b .pname{color:#fcd34d;}
+  .adj-row.c .pname{color:#a5b4fc;}
+  .adj-row.d .pname{color:#86efac;}
+  .stepper{display:flex;align-items:center;gap:6px;}
+  .step{
+    width:28px;height:28px;border-radius:7px;flex:none;
+    background:#0b1220;color:var(--ink);
+    border:1px solid var(--border);font-size:16px;line-height:1;
+    cursor:pointer;transition:.15s;
+  }
+  .step:hover{border-color:var(--accent);color:var(--accent);}
+  .step:active{transform:scale(.9);}
+  .stepper input[type=number]{
+    width:66px;text-align:center;
+    background:#0b1220;color:var(--ink);
+    border:1px solid var(--border);border-radius:6px;
+    padding:5px 6px;font-size:15px;
+  }
+  .adj-row input[type=range]{width:100%;accent-color:var(--accent);cursor:pointer;margin-top:2px;}
+  .adj-foot{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;}
+  .adj-tip{font-size:12px;color:var(--muted);}
+  /* 特征向量图例 */
+  .eig-switch{margin-left:auto;}
+  .eig-legend{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px;min-height:22px;}
+  .eig-item{
+    display:flex;align-items:center;gap:7px;font-size:13px;
+    background:var(--panel2);border:1px solid var(--border);
+    border-radius:8px;padding:5px 11px;
+  }
+  .eig-item .sw{width:16px;height:4px;border-radius:2px;display:inline-block;}
+  .eig-item.muted{color:var(--muted);}
   /* 预设按钮 */
   .presets{
     background:var(--panel);
@@ -127,9 +163,10 @@
   /* 画布区 */
   .stage{
     display:grid;
-    grid-template-columns:1fr 1fr;
+    grid-template-columns:340px 1fr;
     gap:18px;
     margin-bottom:20px;
+    align-items:start;
   }
   .panel{
     background:var(--panel);
@@ -207,30 +244,6 @@
   <h1>2×2 矩阵变换可视化</h1>
   <p class="subtitle">调节矩阵元素，观察基向量与网格如何被线性变换重塑</p>
 
-  <!-- 参数控制 -->
-  <div class="card controls">
-    <div class="ctrl a">
-      <div class="lab"><span class="name">a</span>
-        <input type="number" id="num-a" step="0.1" value="1"></div>
-      <input type="range" id="rng-a" step="0.1" min="-5" max="5" value="1">
-    </div>
-    <div class="ctrl b">
-      <div class="lab"><span class="name">b</span>
-        <input type="number" id="num-b" step="0.1" value="0"></div>
-      <input type="range" id="rng-b" step="0.1" min="-5" max="5" value="0">
-    </div>
-    <div class="ctrl c">
-      <div class="lab"><span class="name">c</span>
-        <input type="number" id="num-c" step="0.1" value="0"></div>
-      <input type="range" id="rng-c" step="0.1" min="-5" max="5" value="0">
-    </div>
-    <div class="ctrl d">
-      <div class="lab"><span class="name">d</span>
-        <input type="number" id="num-d" step="0.1" value="1"></div>
-      <input type="range" id="rng-d" step="0.1" min="-5" max="5" value="1">
-    </div>
-  </div>
-
   <!-- 预设矩阵 -->
   <div class="presets">
     <div class="head">
@@ -245,15 +258,69 @@
     <div class="preset-grid" id="preset-grid"></div>
   </div>
 
-  <!-- 双画布 -->
+  <!-- 数值调整 + 变换画布 -->
   <div class="stage">
-    <div class="panel">
-      <h2><span class="dot" style="background:var(--axis)"></span>原始坐标系</h2>
-      <div class="canvas-box"><canvas id="cv-left"></canvas></div>
+    <div class="panel adjust-panel">
+      <h2><span class="dot" style="background:var(--accent)"></span>数值调整</h2>
+      <div class="adj-row a">
+        <div class="adj-head">
+          <span class="pname">a</span>
+          <div class="stepper">
+            <button class="step" data-k="a" data-d="-1" aria-label="减小 a">−</button>
+            <input type="number" id="num-a" step="0.1" value="1">
+            <button class="step" data-k="a" data-d="1" aria-label="增大 a">＋</button>
+          </div>
+        </div>
+        <input type="range" id="rng-a" step="0.1" min="-5" max="5" value="1">
+      </div>
+      <div class="adj-row b">
+        <div class="adj-head">
+          <span class="pname">b</span>
+          <div class="stepper">
+            <button class="step" data-k="b" data-d="-1" aria-label="减小 b">−</button>
+            <input type="number" id="num-b" step="0.1" value="0">
+            <button class="step" data-k="b" data-d="1" aria-label="增大 b">＋</button>
+          </div>
+        </div>
+        <input type="range" id="rng-b" step="0.1" min="-5" max="5" value="0">
+      </div>
+      <div class="adj-row c">
+        <div class="adj-head">
+          <span class="pname">c</span>
+          <div class="stepper">
+            <button class="step" data-k="c" data-d="-1" aria-label="减小 c">−</button>
+            <input type="number" id="num-c" step="0.1" value="0">
+            <button class="step" data-k="c" data-d="1" aria-label="增大 c">＋</button>
+          </div>
+        </div>
+        <input type="range" id="rng-c" step="0.1" min="-5" max="5" value="0">
+      </div>
+      <div class="adj-row d">
+        <div class="adj-head">
+          <span class="pname">d</span>
+          <div class="stepper">
+            <button class="step" data-k="d" data-d="-1" aria-label="减小 d">−</button>
+            <input type="number" id="num-d" step="0.1" value="1">
+            <button class="step" data-k="d" data-d="1" aria-label="增大 d">＋</button>
+          </div>
+        </div>
+        <input type="range" id="rng-d" step="0.1" min="-5" max="5" value="1">
+      </div>
+      <div class="adj-foot">
+        <span class="adj-tip">步进 0.1 · 范围 −5 ~ 5</span>
+      </div>
     </div>
     <div class="panel">
-      <h2><span class="dot" style="background:var(--blue)"></span>变换后坐标系</h2>
+      <h2>
+        <span class="dot" style="background:var(--blue)"></span>变换后坐标系
+        <label class="switch eig-switch" title="在画布上绘制特征向量与特征值">
+          <input type="checkbox" id="eig-toggle" checked>
+          <span class="track"></span>
+          <span class="sl">特征向量</span>
+        </label>
+      </h2>
       <div class="canvas-box"><canvas id="cv-right"></canvas></div>
+      <div class="eig-legend" id="eig-legend"></div>
     </div>
   </div>
 
@@ -310,11 +377,10 @@
     c:document.getElementById('m-c'), d:document.getElementById('m-d'),
     det:document.getElementById('det'), area:document.getElementById('area'),
     tags:document.getElementById('tags'),
+    legend:document.getElementById('eig-legend'),
   };
 
-  const cvL = document.getElementById('cv-left');
   const cvR = document.getElementById('cv-right');
-  const ctxL = cvL.getContext('2d');
   const ctxR = cvR.getContext('2d');
 
   function readParams(){
@@ -336,6 +402,18 @@
   ['a','b','c','d'].forEach(bind);
   function setVal(k,v){ els[k].num.value=v; els[k].rng.value=v; }
 
+  // 微调步进按钮（±0.1）
+  document.querySelectorAll('.step').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      cancelAnim();
+      const k=btn.dataset.k, d=parseFloat(btn.dataset.d);
+      const cur=parseFloat(els[k].num.value)||0;
+      setVal(k, round2(clamp(cur+d*0.1)));
+      markActive(null);
+      render();
+    });
+  });
+
   // 预设矩阵（值保留两位小数，便于滑块对齐）
   const S = Math.SQRT1_2; // cos45° ≈ 0.71
   const PRESETS = [
@@ -355,6 +433,7 @@
 
   const presetGrid = document.getElementById('preset-grid');
   const animToggle = document.getElementById('anim-toggle');
+  const eigToggle = document.getElementById('eig-toggle');
   PRESETS.forEach((p,idx)=>{
     const btn=document.createElement('button');
     btn.className='preset';
@@ -476,21 +555,9 @@
     }
   }
 
-  function drawLeft(){
-    const size=fitCanvas(cvL);
-    const m=makeMapper(size);
-    drawBase(ctxL,size,m,{unitSquare:true});
-    // 基向量
-    const o=m.toPx(0,0);
-    drawArrow(ctxL,o,m.toPx(1,0),'#ef4444',3,12);   // e1 红
-    drawArrow(ctxL,o,m.toPx(0,1),'#22c55e',3,12);   // e2 绿
-    // 标签
-    ctxL.font='bold 13px sans-serif';
-    ctxL.fillStyle='#ef4444'; ctxL.fillText('e₁', m.toPx(1,0)[0]+6, m.toPx(1,0)[1]);
-    ctxL.fillStyle='#22c55e'; ctxL.fillText('e₂', m.toPx(0,1)[0]+6, m.toPx(0,1)[1]+4);
-  }
+  function drawLeft(){ /* 已移除原始坐标系画布 */ }
 
-  function drawRight(P){
+  function drawRight(P, eig){
     const size=fitCanvas(cvR);
     const m=makeMapper(size);
     drawBase(ctxR,size,m,{unitSquare:false});
@@ -511,8 +578,37 @@
     for(let i=1;i<4;i++)ctxR.lineTo(quad[i][0],quad[i][1]);
     ctxR.closePath(); ctxR.fill();
     ctxR.strokeStyle='#60a5fa'; ctxR.lineWidth=2; ctxR.stroke();
-    // 变换后的基向量（粗箭头）
     const o=m.toPx(0,0);
+    // 特征向量与特征值标注
+    if(eig && eigToggle.checked){
+      if(eig.complex){
+        ctxR.fillStyle='rgba(226,232,240,.85)';
+        ctxR.font='13px sans-serif'; ctxR.textAlign='center';
+        ctxR.fillText('特征值为复数，无实特征向量', size/2, 22);
+      } else {
+        const colors=['#c084fc','#fb923c'];
+        eig.values.forEach((ev,i)=>{
+          if(!ev.v) return;
+          const col=colors[i%2];
+          const [vx,vy]=ev.v;
+          // 不变直线（虚线）：特征方向在变换下保持不变
+          ctxR.save();
+          ctxR.setLineDash([5,5]); ctxR.globalAlpha=.45;
+          ctxR.strokeStyle=col; ctxR.lineWidth=1.5;
+          const p1=T(-5*vx,-5*vy), p2=T(5*vx,5*vy);
+          ctxR.beginPath(); ctxR.moveTo(p1[0],p1[1]); ctxR.lineTo(p2[0],p2[1]); ctxR.stroke();
+          ctxR.restore();
+          // 单位特征向量的像 = λ·v
+          const tip=T(vx,vy);
+          drawArrow(ctxR,o,tip,col,4,13);
+          const lx=Math.max(8,Math.min(size-82, tip[0]+8));
+          const ly=Math.max(16,Math.min(size-8, tip[1]-8));
+          ctxR.font='bold 13px sans-serif'; ctxR.fillStyle=col; ctxR.textAlign='left';
+          ctxR.fillText('λ'+(i===0?'₁':'₂')+'='+fmt(ev.l), lx, ly);
+        });
+      }
+    }
+    // 变换后的基向量（粗箭头，绘制在最上层）
     drawArrow(ctxR,o,T(1,0),'#ef4444',5,16);   // e1' 红
     drawArrow(ctxR,o,T(0,1),'#22c55e',5,16);   // e2' 绿
     ctxR.font='bold 13px sans-serif';
@@ -572,10 +668,35 @@
     return (Object.is(r,-0)?0:r).toString();
   }
 
+  // 求 2×2 矩阵的特征值与特征向量
+  function eigen(P){
+    const {a,b,c,d}=P;
+    const tr=a+d, D=a*d-b*c;
+    const disc=tr*tr-4*D;
+    const ET=0.02;
+    if(disc<-ET){ return {complex:true, values:[]}; }
+    const sq=Math.sqrt(disc<0?0:disc);
+    const l1=(tr+sq)/2, l2=(tr-sq)/2;
+    function vec(l){
+      let vx,vy;
+      if(Math.abs(b)>1e-9){ vx=b; vy=l-a; }
+      else if(Math.abs(c)>1e-9){ vx=l-d; vy=c; }
+      else if(Math.abs(a-d)<1e-9){ vx=1; vy=1; }   // 数量矩阵：任意方向
+      else if(Math.abs(a-l)<1e-9){ vx=1; vy=0; }
+      else { vx=0; vy=1; }
+      const n=Math.hypot(vx,vy);
+      if(n<1e-9) return null;
+      return [vx/n, vy/n];
+    }
+    const values=[{l:l1, v:vec(l1)}];
+    if(Math.abs(l1-l2)>ET) values.push({l:l2, v:vec(l2)});
+    return {complex:false, values};
+  }
+
   function render(){
     const P=readParams();
-    drawLeft();
-    drawRight(P);
+    const eig=eigen(P);
+    drawRight(P, eig);
     // 信息
     out.a.textContent=fmt(P.a); out.b.textContent=fmt(P.b);
     out.c.textContent=fmt(P.c); out.d.textContent=fmt(P.d);
@@ -590,6 +711,22 @@
       s.textContent=t;
       out.tags.appendChild(s);
     });
+    // 特征值图例
+    out.legend.innerHTML='';
+    const ecolors=['#c084fc','#fb923c'];
+    if(eig.complex){
+      const s=document.createElement('span');
+      s.className='eig-item muted';
+      s.textContent='特征值为复数，无实特征向量';
+      out.legend.appendChild(s);
+    } else {
+      eig.values.forEach((ev,i)=>{
+        const s=document.createElement('span');
+        s.className='eig-item';
+        s.innerHTML='<span class="sw" style="background:'+ecolors[i%2]+'"></span>λ'+(i===0?'₁':'₂')+' = '+ev.l.toFixed(2);
+        out.legend.appendChild(s);
+      });
+    }
   }
 
   window.addEventListener('resize',render);
